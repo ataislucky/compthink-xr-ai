@@ -1,0 +1,1869 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CompThink XR+AI — Laboratorium 3D Berpikir Komputasional</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        cyber: {
+                            950: '#050814',
+                            900: '#0a1026',
+                            800: '#111b3d',
+                            accent: '#00f0ff',
+                            purple: '#8b5cf6',
+                            emerald: '#10b981',
+                            amber: '#f59e0b',
+                            rose: '#f43f5e'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #050814;
+            color: #f8fafc;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* AR Camera Video & Simulated Fallback Background */
+        #ar-video-bg {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 0;
+            display: none;
+        }
+
+        #ar-simulated-room {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            display: none;
+            background: 
+                radial-gradient(circle at 50% 35%, rgba(56, 189, 248, 0.18), transparent 60%),
+                linear-gradient(180deg, #1e293b 0%, #334155 48%, #0f172a 48.5%, #020617 100%);
+        }
+
+        /* Grid perspektif meja AR virtual */
+        #ar-simulated-room::after {
+            content: '';
+            position: absolute;
+            left: -50%;
+            right: -50%;
+            top: 48.5%;
+            bottom: -20%;
+            background-image: 
+                linear-gradient(to right, rgba(0, 240, 255, 0.25) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 240, 255, 0.25) 1px, transparent 1px);
+            background-size: 60px 60px;
+            transform: perspective(500px) rotateX(68deg);
+            transform-origin: top center;
+            pointer-events: none;
+        }
+
+        #canvas-container {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            outline: none;
+        }
+
+        /* Glassmorphism HUD Panels */
+        .glass-panel {
+            background: rgba(10, 16, 38, 0.76);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(56, 189, 248, 0.22);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+        }
+
+        .glass-card {
+            background: rgba(17, 27, 61, 0.65);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            transition: all 0.2s ease;
+        }
+
+        .glass-card:hover {
+            border-color: rgba(0, 240, 255, 0.5);
+            background: rgba(23, 37, 84, 0.78);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(56, 189, 248, 0.4);
+            border-radius: 9999px;
+        }
+
+        /* VR Stereo Split Divider */
+        #vr-split-divider {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 4px;
+            background: #000;
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.6);
+            z-index: 5;
+            display: none;
+            pointer-events: none;
+        }
+
+        /* AR Reticle Overlay */
+        #ar-reticle-hud {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 220px;
+            height: 220px;
+            border: 1.5px dashed rgba(0, 240, 255, 0.45);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 2;
+            display: none;
+            animation: spinSlow 18s linear infinite;
+        }
+
+        @keyframes spinSlow {
+            from { transform: translate(-50%, -50%) rotate(0deg); }
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        /* Pulse Glow */
+        .glow-cyan {
+            box-shadow: 0 0 16px rgba(0, 240, 255, 0.35);
+        }
+
+        /* Toast Notification */
+        #toast-container {
+            position: fixed;
+            top: 76px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 50;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: max-content;
+            max-width: 92vw;
+        }
+    </style>
+</head>
+<body class="font-sans antialiased text-slate-100">
+
+    <!-- Latar Belakang AR: Kamera Real-time & Fallback Ruangan Virtual AR -->
+    <video id="ar-video-bg" autoplay playsinline muted></video>
+    <div id="ar-simulated-room">
+        <div class="absolute top-20 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-[11px] font-mono text-cyan-300">
+            <i class="fa-solid fa-cube mr-1"></i> SIMULASI RUANG AR AKTIF (Permukaan Meja Terdeteksi)
+        </div>
+    </div>
+    <div id="ar-reticle-hud"></div>
+
+    <!-- Pemisah Layar VR Stereo -->
+    <div id="vr-split-divider"></div>
+
+    <!-- Kanvas Utama 3D WebGL / Three.js -->
+    <div id="canvas-container"></div>
+
+    <!-- Notifikasi Toast Non-Blocking (Pengganti alert) -->
+    <div id="toast-container"></div>
+
+    <!-- TOP BAR: Header, Timer Durasi 15-20 Menit, Progress Tracker & Kontrol XR -->
+    <header class="fixed top-0 left-0 right-0 z-30 px-3 py-2 sm:px-5 sm:py-3 pointer-events-none">
+        <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-2 pointer-events-auto">
+            
+            <!-- Brand & Judul MK -->
+            <div class="glass-panel rounded-2xl px-3.5 py-2 flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400 to-purple-600 flex items-center justify-center shadow-lg shrink-0">
+                    <i class="fa-solid fa-brain text-slate-950 text-base"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-sm sm:text-base font-extrabold tracking-tight bg-gradient-to-r from-cyan-300 via-white to-purple-300 bg-clip-text text-transparent">
+                            CompThink XR+AI
+                        </h1>
+                        <span class="hidden md:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-400/30">
+                            MK Berpikir Komputasional
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 hidden sm:block">Lab Simulasi Interaktif 3D • AR • VR • GenAI</p>
+                </div>
+            </div>
+
+            <!-- Tracker Durasi Pembelajaran (Target 15-20 Menit) & Skor -->
+            <div class="glass-panel rounded-2xl px-3.5 py-2 flex items-center gap-3 sm:gap-5">
+                <!-- Timer Sesi -->
+                <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-amber-400 text-xs">
+                        <i class="fa-solid fa-clock"></i>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-slate-400 leading-none">Durasi (Target 15-20m)</div>
+                        <div id="session-timer" class="text-xs sm:text-sm font-mono font-bold text-amber-300 mt-0.5">00:00 / 20:00</div>
+                    </div>
+                </div>
+
+                <div class="h-6 w-[1px] bg-slate-700/80"></div>
+
+                <!-- Progress 4 Pilar -->
+                <div class="flex items-center gap-2">
+                    <div>
+                        <div class="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                            <span>Progres Modul</span>
+                            <span id="progress-text" class="font-mono text-cyan-300 font-semibold">0/4</span>
+                        </div>
+                        <div class="w-20 sm:w-28 h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div id="progress-bar" class="h-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="h-6 w-[1px] bg-slate-700/80 hidden sm:block"></div>
+
+                <!-- Skor CT -->
+                <div class="hidden sm:flex items-center gap-2">
+                    <div class="text-right">
+                        <div class="text-[10px] text-slate-400 leading-none">Skor CT</div>
+                        <div id="ct-score" class="text-sm font-mono font-bold text-emerald-400 mt-0.5">0 XP</div>
+                    </div>
+                    <button onclick="openSummaryModal()" title="Lihat Laporan & Sertifikat" class="p-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-300 text-xs transition">
+                        <i class="fa-solid fa-award"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Kontrol Mode XR: 3D Lab, VR Stereo, AR Camera -->
+            <div class="glass-panel rounded-2xl p-1.5 flex items-center gap-1.5">
+                <button id="btn-mode-3d" onclick="setXRMode('3D')" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-cyan-500 text-slate-950 shadow transition">
+                    <i class="fa-solid fa-cube"></i>
+                    <span>3D Lab</span>
+                </button>
+                <button id="btn-mode-vr" onclick="setXRMode('VR')" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-slate-300 hover:bg-slate-800/80 transition">
+                    <i class="fa-solid fa-vr-cardboard"></i>
+                    <span>VR Stereo</span>
+                </button>
+                <button id="btn-mode-ar" onclick="setXRMode('AR')" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-slate-300 hover:bg-slate-800/80 transition">
+                    <i class="fa-solid fa-camera"></i>
+                    <span>AR Cam</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- NAVIGASI MODUL 4 PILAR BERPIKIR KOMPUTASIONAL (Kiri / Bawah Mobile) -->
+    <nav class="fixed left-3 top-20 sm:top-24 z-20 flex flex-row sm:flex-col gap-2 max-w-[95vw] overflow-x-auto pb-1 sm:pb-0 pointer-events-auto">
+        <button id="tab-mod-1" onclick="switchModule(1)" class="glass-panel rounded-2xl p-2.5 sm:px-3.5 sm:py-3 flex items-center gap-2.5 text-left border-cyan-400 bg-cyan-950/60 transition shrink-0">
+            <div class="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-400/50 flex items-center justify-center text-cyan-300 font-bold text-xs relative">
+                1
+                <span id="badge-done-1" class="hidden absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-slate-950 text-[9px] flex items-center justify-center"><i class="fa-solid fa-check"></i></span>
+            </div>
+            <div>
+                <div class="text-xs font-bold text-white">Dekomposisi</div>
+                <div class="text-[10px] text-cyan-300/80 font-mono">~4-5 mnt • Sub-sistem</div>
+            </div>
+        </button>
+
+        <button id="tab-mod-2" onclick="switchModule(2)" class="glass-panel rounded-2xl p-2.5 sm:px-3.5 sm:py-3 flex items-center gap-2.5 text-left transition shrink-0">
+            <div class="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-400/40 flex items-center justify-center text-purple-300 font-bold text-xs relative">
+                2
+                <span id="badge-done-2" class="hidden absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-slate-950 text-[9px] flex items-center justify-center"><i class="fa-solid fa-check"></i></span>
+            </div>
+            <div>
+                <div class="text-xs font-bold text-slate-200">Pengenalan Pola</div>
+                <div class="text-[10px] text-slate-400 font-mono">~4-5 mnt • Sinyal Node</div>
+            </div>
+        </button>
+
+        <button id="tab-mod-3" onclick="switchModule(3)" class="glass-panel rounded-2xl p-2.5 sm:px-3.5 sm:py-3 flex items-center gap-2.5 text-left transition shrink-0">
+            <div class="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300 font-bold text-xs relative">
+                3
+                <span id="badge-done-3" class="hidden absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-slate-950 text-[9px] flex items-center justify-center"><i class="fa-solid fa-check"></i></span>
+            </div>
+            <div>
+                <div class="text-xs font-bold text-slate-200">Abstraksi</div>
+                <div class="text-[10px] text-slate-400 font-mono">~4-5 mnt • Filter Layer</div>
+            </div>
+        </button>
+
+        <button id="tab-mod-4" onclick="switchModule(4)" class="glass-panel rounded-2xl p-2.5 sm:px-3.5 sm:py-3 flex items-center gap-2.5 text-left transition shrink-0">
+            <div class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300 font-bold text-xs relative">
+                4
+                <span id="badge-done-4" class="hidden absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-slate-950 text-[9px] flex items-center justify-center"><i class="fa-solid fa-check"></i></span>
+            </div>
+            <div>
+                <div class="text-xs font-bold text-slate-200">Desain Algoritma</div>
+                <div class="text-[10px] text-slate-400 font-mono">~5 mnt • Robot Labirin</div>
+            </div>
+        </button>
+
+        <!-- Kontrol Kamera Cepat -->
+        <div class="hidden sm:flex glass-panel rounded-2xl p-2.5 flex-col gap-1.5 mt-1">
+            <div class="text-[10px] font-mono uppercase tracking-wider text-slate-400 px-1">Kamera 3D</div>
+            <div class="grid grid-cols-2 gap-1.5">
+                <button onclick="setCameraPreset('iso')" class="px-2 py-1.5 rounded-lg bg-slate-800/80 hover:bg-cyan-500/20 text-[11px] text-slate-200 border border-slate-700/70 transition">
+                    <i class="fa-solid fa-compass mr-1 text-cyan-400"></i>Isometrik
+                </button>
+                <button onclick="setCameraPreset('top')" class="px-2 py-1.5 rounded-lg bg-slate-800/80 hover:bg-cyan-500/20 text-[11px] text-slate-200 border border-slate-700/70 transition">
+                    <i class="fa-solid fa-arrow-down mr-1 text-cyan-400"></i>Atas
+                </button>
+            </div>
+            <!-- Kontrol Skala AR (Muncul saat mode AR aktif) -->
+            <div id="ar-controls-box" class="hidden pt-1.5 border-t border-slate-700/70">
+                <div class="flex justify-between text-[10px] text-cyan-300 mb-1">
+                    <span>Skala Objek AR</span>
+                    <span id="ar-scale-val">1.0x</span>
+                </div>
+                <input type="range" id="ar-scale-slider" min="0.5" max="1.6" step="0.1" value="1.0" oninput="updateARScale(this.value)" class="w-full accent-cyan-400 h-1.5 bg-slate-700 rounded-lg cursor-pointer">
+            </div>
+        </div>
+    </nav>
+
+    <!-- PANEL INTERAKSI KANAN (HUD Kontekstual Modul + Generator GenAI) -->
+    <aside id="right-hud-panel" class="fixed right-3 bottom-3 sm:top-24 sm:bottom-4 z-20 w-[calc(100vw-24px)] sm:w-[370px] md:w-[400px] max-h-[52vh] sm:max-h-none flex flex-col gap-2.5 pointer-events-auto">
+        
+        <!-- KARTU INTEGRASI GENAI (Gemini API Dynamic Puzzle & Skenario Generator) -->
+        <div class="glass-panel rounded-2xl p-3 border-purple-500/40 shrink-0">
+            <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
+                    <span class="text-xs font-bold text-purple-200 tracking-wide">GenAI Scenario Engine (Gemini)</span>
+                </div>
+                <select id="ai-difficulty" class="bg-slate-900/90 border border-purple-400/40 rounded-lg px-2 py-1 text-[11px] text-purple-200 focus:outline-none">
+                    <option value="Pemula">Level: Pemula</option>
+                    <option value="Menengah" selected>Level: Menengah</option>
+                    <option value="Mahir">Level: Mahir</option>
+                </select>
+            </div>
+
+            <div class="flex gap-1.5">
+                <input id="ai-topic-input" type="text" placeholder="Konteks: Smart City, Logistik, Medis..." class="flex-1 bg-slate-900/80 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-purple-400">
+                <button id="btn-generate-ai" onclick="generateAIChallenge()" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-lg transition shrink-0">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>Generate 3D</span>
+                </button>
+            </div>
+            <div id="ai-status-bar" class="text-[10px] text-slate-400 mt-1.5 flex items-center justify-between">
+                <span><i class="fa-solid fa-microchip text-purple-400 mr-1"></i>Siap menghasilkan variasi objek 3D</span>
+                <span id="ai-badge-source" class="font-mono text-purple-300">Default Lab</span>
+            </div>
+        </div>
+
+        <!-- PANEL KONTEN MODUL AKTIF (Scrollable) -->
+        <div class="glass-panel rounded-2xl p-3.5 sm:p-4 flex-1 overflow-y-auto flex flex-col justify-between gap-3">
+            <div id="module-content-area">
+                <!-- Konten dirender dinamis oleh JS -->
+            </div>
+
+            <!-- Umpan Balik / Analisis Logika dari GenAI Tutor -->
+            <div id="ai-feedback-box" class="hidden rounded-xl bg-indigo-950/70 border border-indigo-400/40 p-2.5 text-xs text-indigo-100">
+                <div class="flex items-center gap-1.5 font-bold text-indigo-300 mb-1">
+                    <i class="fa-solid fa-robot"></i>
+                    <span>Evaluasi Logika GenAI:</span>
+                </div>
+                <p id="ai-feedback-text" class="leading-relaxed text-[11px] text-slate-200"></p>
+            </div>
+        </div>
+    </aside>
+
+    <!-- PETUNJUK INTERAKSI KANVAS 3D (Kiri Bawah Desktop) -->
+    <div class="hidden sm:flex fixed left-3 bottom-4 z-10 glass-panel rounded-2xl px-3.5 py-2 items-center gap-3 text-[11px] text-slate-300 pointer-events-none">
+        <span><i class="fa-solid fa-computer-mouse text-cyan-400 mr-1"></i>Klik Objek 3D untuk Interaksi</span>
+        <span class="text-slate-600">|</span>
+        <span><i class="fa-solid fa-rotate text-purple-400 mr-1"></i>Seret: Putar • Scroll: Zoom</span>
+    </div>
+
+    <!-- MODAL RINGKASAN & SERTIFIKAT PEMBELAJARAN (15-20 Menit) -->
+    <div id="summary-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
+        <div class="glass-panel rounded-3xl max-w-lg w-full p-6 border-cyan-400/40 relative">
+            <button onclick="closeSummaryModal()" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div class="text-center mb-4">
+                <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-slate-950 text-2xl shadow-lg mb-3">
+                    <i class="fa-solid fa-graduation-cap"></i>
+                </div>
+                <h2 class="text-xl font-extrabold text-white">Laporan Capaian Pembelajaran</h2>
+                <p class="text-xs text-slate-400">Mata Kuliah Berpikir Komputasional (XR + GenAI Lab)</p>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2.5 mb-4 text-center">
+                <div class="glass-card rounded-xl p-2.5">
+                    <div class="text-[10px] text-slate-400">Modul Selesai</div>
+                    <div id="modal-modules-done" class="text-base font-bold text-cyan-300 font-mono mt-0.5">0 / 4</div>
+                </div>
+                <div class="glass-card rounded-xl p-2.5">
+                    <div class="text-[10px] text-slate-400">Total Skor CT</div>
+                    <div id="modal-total-score" class="text-base font-bold text-emerald-400 font-mono mt-0.5">0 XP</div>
+                </div>
+                <div class="glass-card rounded-xl p-2.5">
+                    <div class="text-[10px] text-slate-400">Waktu Belajar</div>
+                    <div id="modal-time-spent" class="text-base font-bold text-amber-300 font-mono mt-0.5">00:00</div>
+                </div>
+            </div>
+
+            <div id="modal-checklist" class="space-y-2 mb-5 text-xs">
+                <!-- Diisi dinamis -->
+            </div>
+
+            <div class="flex gap-2">
+                <button onclick="closeSummaryModal()" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition">
+                    Lanjutkan Eksplorasi
+                </button>
+                <button onclick="resetAllProgress()" class="px-4 py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-semibold text-xs transition">
+                    Reset Sesi
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =========================================================================
+        // KONFIGURASI GEMINI API & STATE GLOBAL PEMBELAJARAN
+        // =========================================================================
+        const apiKey = ""; // Disediakan otomatis oleh environment runtime
+        const GEMINI_MODEL = "gemini-3-flash-preview";
+
+        const state = {
+            currentModule: 1,
+            xrMode: '3D', // '3D', 'VR', 'AR'
+            arStream: null,
+            arScale: 1.0,
+            secondsElapsed: 0,
+            score: 0,
+            completedModules: { 1: false, 2: false, 3: false, 4: false },
+            
+            // Data Modul 1: Dekomposisi
+            mod1: {
+                title: "Sistem Smart City & Pabrik Otomatis",
+                scenario: "Pecah infrastruktur Smart City 3D yang kompleks menjadi 4 sub-sistem fungsional utama dengan mengklik langsung blok arsitektur di ruang 3D.",
+                isExploded: false,
+                components: [
+                    { id: "c1", name: "Sub-Sistem Sensor IoT", desc: "Mengumpulkan data lalu lintas & suhu secara real-time.", color: "#00f0ff", inspected: false },
+                    { id: "c2", name: "Unit Pemroses Edge AI", desc: "Menganalisis anomali sinyal sebelum dikirim ke cloud.", color: "#a855f7", inspected: false },
+                    { id: "c3", name: "Jaringan Distribusi Energi", desc: "Mengatur beban listrik pintar (Smart Grid) otomatis.", color: "#f59e0b", inspected: false },
+                    { id: "c4", name: "Aktuator Robotika Logistik", desc: "Menjalankan pengiriman barang otonom berbasis rute.", color: "#10b981", inspected: false }
+                ]
+            },
+
+            // Data Modul 2: Pengenalan Pola
+            mod2: {
+                title: "Analisis Pola Sinyal Jaringan 3D",
+                scenario: "Amati urutan warna dan bentuk node 3D yang berdenyut dari kiri ke kanan, lalu tentukan node ke-5 yang paling tepat untuk melengkapi pola algoritma!",
+                sequence: [
+                    { shape: "box", colorName: "Cyan", hex: "#00f0ff" },
+                    { shape: "sphere", colorName: "Ungu", hex: "#a855f7" },
+                    { shape: "box", colorName: "Cyan", hex: "#00f0ff" },
+                    { shape: "sphere", colorName: "Ungu", hex: "#a855f7" }
+                ],
+                targetAnswer: { shape: "box", colorName: "Cyan", hex: "#00f0ff" },
+                options: [
+                    { shape: "box", colorName: "Cyan (Kubus)", hex: "#00f0ff" },
+                    { shape: "sphere", colorName: "Ungu (Bola)", hex: "#a855f7" },
+                    { shape: "cone", colorName: "Amber (Kerucut)", hex: "#f59e0b" }
+                ],
+                ruleExplanation: "Pola bergantian (Alternating ABAB): Kubus Cyan diikuti Bola Ungu, sehingga elemen ke-5 kembali ke Kubus Cyan.",
+                solved: false
+            },
+
+            // Data Modul 3: Abstraksi
+            mod3: {
+                title: "Filter Abstraksi Topologi Rute Inti",
+                scenario: "Model 3D saat ini dipenuhi elemen visual non-esensial (gedung dekoratif, partikel cuaca, kabel sekunder). Aktifkan filter abstraksi untuk menyisakan jalur logika inti (Graph)!",
+                showDecorations: true,
+                showSecondaryWires: true,
+                showCoreGraph: true,
+                targetNodeSelected: false,
+                coreSummary: "Jalur Terpendek: Node Sumber (A) → Router Utama (B) → Server Tujuan (C) dengan bobot latensi minimal."
+            },
+
+            // Data Modul 4: Desain Algoritma
+            mod4: {
+                title: "Navigasi Robot Otonom di Labirin 3D",
+                scenario: "Susun instruksi algoritma agar Robot 3D mencapai ubin Target Hijau tanpa menabrak rintangan merah.",
+                gridSize: 5,
+                // 0 = jalan, 1 = rintangan, 2 = start, 3 = goal
+                grid: [
+                    [2, 0, 1, 0, 0],
+                    [1, 0, 1, 0, 1],
+                    [0, 0, 0, 0, 0],
+                    [0, 1, 1, 1, 0],
+                    [0, 0, 0, 0, 3]
+                ],
+                startPos: { x: 0, z: 0, dir: 1 }, // dir: 0=Utara(-Z), 1=Timur(+X), 2=Selatan(+Z), 3=Barat(-X)
+                robotPos: { x: 0, z: 0, dir: 1 },
+                commands: [],
+                isRunning: false
+            }
+        };
+
+        // =========================================================================
+        // INISIALISASI THREE.JS SCENE, KAMERA, PENCAHAYAAN & RAYCASTER
+        // =========================================================================
+        let scene, camera, renderer, controls;
+        let worldGroup, labEnvironmentGroup;
+        let raycaster, mouse;
+        let interactiveMeshes = [];
+        let animatedObjects = [];
+        let clock = new THREE.Clock();
+
+        // Referensi objek spesifik per modul
+        let decompMeshes = [];
+        let patternMeshes = [];
+        let abstractionGroups = { decorations: null, secondary: null, core: null, targetCoreNode: null };
+        let robotMesh = null;
+        let mazeTileMeshes = [];
+
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x050814, 0.022);
+
+            camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(7.5, 6.8, 8.5);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.06;
+            controls.maxDistance = 24;
+            controls.minDistance = 3;
+            controls.maxPolarAngle = Math.PI / 2 - 0.04;
+            controls.target.set(0, 1.2, 0);
+
+            // Pencahayaan Futuristik
+            const ambientLight = new THREE.AmbientLight(0x94a3b8, 0.75);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
+            dirLight.position.set(8, 15, 10);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            scene.add(dirLight);
+
+            const cyanPointLight = new THREE.PointLight(0x00f0ff, 1.4, 25);
+            cyanPointLight.position.set(-5, 5, -5);
+            scene.add(cyanPointLight);
+
+            const purplePointLight = new THREE.PointLight(0xa855f7, 1.2, 25);
+            purplePointLight.position.set(6, 4, 6);
+            scene.add(purplePointLight);
+
+            // Lingkungan Lab 3D (Disembunyikan saat mode AR aktif)
+            labEnvironmentGroup = new THREE.Group();
+            const gridHelper = new THREE.GridHelper(28, 28, 0x00f0ff, 0x1e293b);
+            gridHelper.position.y = -0.01;
+            labEnvironmentGroup.add(gridHelper);
+
+            const floorGeo = new THREE.CircleGeometry(14, 48);
+            const floorMat = new THREE.MeshStandardMaterial({
+                color: 0x090f24,
+                roughness: 0.7,
+                metalness: 0.3,
+                transparent: true,
+                opacity: 0.85
+            });
+            const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+            floorMesh.rotation.x = -Math.PI / 2;
+            floorMesh.receiveShadow = true;
+            labEnvironmentGroup.add(floorMesh);
+
+            // Partikel melayang di lab
+            const partGeo = new THREE.BufferGeometry();
+            const partCount = 160;
+            const posArray = new Float32Array(partCount * 3);
+            for (let i = 0; i < partCount * 3; i++) {
+                posArray[i] = (Math.random() - 0.5) * 24;
+                if (i % 3 === 1) posArray[i] = Math.random() * 10 + 0.5;
+            }
+            partGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const partMat = new THREE.PointsMaterial({ size: 0.08, color: 0x38bdf8, transparent: true, opacity: 0.65 });
+            const particles = new THREE.Points(partGeo, partMat);
+            labEnvironmentGroup.add(particles);
+            scene.add(labEnvironmentGroup);
+
+            // Grup Utama Konten Pembelajaran 3D (Dapat diskalakan di mode AR)
+            worldGroup = new THREE.Group();
+            scene.add(worldGroup);
+
+            // Raycasting untuk interaksi klik/tap objek 3D
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('pointerdown', onCanvasPointerDown);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function setCameraPreset(type) {
+            if (type === 'iso') {
+                camera.position.set(7.5, 6.8, 8.5);
+                controls.target.set(0, 1.2, 0);
+            } else if (type === 'top') {
+                camera.position.set(0, 12.5, 0.1);
+                controls.target.set(0, 0, 0);
+            }
+            controls.update();
+        }
+
+        // =========================================================================
+        // PEMBANGUN VISUALISASI 3D PER MODUL BERPIKIR KOMPUTASIONAL
+        // =========================================================================
+        function clearWorldGroup() {
+            while (worldGroup.children.length > 0) {
+                worldGroup.remove(worldGroup.children[0]);
+            }
+            interactiveMeshes = [];
+            animatedObjects = [];
+            decompMeshes = [];
+            patternMeshes = [];
+            robotMesh = null;
+        }
+
+        // --- MODUL 1: DEKOMPOSISI 3D ---
+        function buildModule1Scene() {
+            clearWorldGroup();
+            const basePlate = new THREE.Mesh(
+                new THREE.CylinderGeometry(3.8, 4.0, 0.25, 32),
+                new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.6, roughness: 0.3 })
+            );
+            basePlate.position.y = 0.12;
+            basePlate.receiveShadow = true;
+            worldGroup.add(basePlate);
+
+            // Inti Penghubung Sistem
+            const coreHub = new THREE.Mesh(
+                new THREE.OctahedronGeometry(0.65, 1),
+                new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.6, wireframe: true })
+            );
+            coreHub.position.set(0, 1.8, 0);
+            worldGroup.add(coreHub);
+            animatedObjects.push({ mesh: coreHub, type: 'spin' });
+
+            // 4 Sub-komponen 3D yang dapat dipecah (Exploded View) & diklik
+            const offsets = [
+                { x: -1.1, y: 1.1, z: -1.1, ex: -2.4, ey: 1.5, ez: -2.4 },
+                { x: 1.1,  y: 1.1, z: -1.1, ex: 2.4,  ey: 1.5, ez: -2.4 },
+                { x: -1.1, y: 2.5, z: 1.1,  ex: -2.4, ey: 2.8, ez: 2.4 },
+                { x: 1.1,  y: 2.5, z: 1.1,  ex: 2.4,  ey: 2.8, ez: 2.4 }
+            ];
+
+            state.mod1.components.forEach((comp, idx) => {
+                const pos = offsets[idx];
+                const geo = new THREE.BoxGeometry(1.5, 1.1, 1.5);
+                const mat = new THREE.MeshStandardMaterial({
+                    color: new THREE.Color(comp.color),
+                    emissive: new THREE.Color(comp.color),
+                    emissiveIntensity: comp.inspected ? 0.45 : 0.15,
+                    roughness: 0.25,
+                    metalness: 0.5
+                });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.castShadow = true;
+                mesh.position.set(
+                    state.mod1.isExploded ? pos.ex : pos.x,
+                    state.mod1.isExploded ? pos.ey : pos.y,
+                    state.mod1.isExploded ? pos.ez : pos.z
+                );
+
+                // Frame wireframe luar
+                const wire = new THREE.LineSegments(
+                    new THREE.EdgesGeometry(geo),
+                    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
+                );
+                mesh.add(wire);
+
+                mesh.userData = {
+                    module: 1,
+                    compIndex: idx,
+                    collapsedPos: new THREE.Vector3(pos.x, pos.y, pos.z),
+                    explodedPos: new THREE.Vector3(pos.ex, pos.ey, pos.ez)
+                };
+
+                worldGroup.add(mesh);
+                interactiveMeshes.push(mesh);
+                decompMeshes.push(mesh);
+            });
+        }
+
+        function toggleDecompExplode() {
+            state.mod1.isExploded = !state.mod1.isExploded;
+            renderModuleUI();
+            showToast(state.mod1.isExploded ? "Sistem dipecah menjadi sub-modul terpisah!" : "Sub-modul disatukan kembali.");
+        }
+
+        function inspectDecompComponent(idx) {
+            const comp = state.mod1.components[idx];
+            if (!comp.inspected) {
+                comp.inspected = true;
+                addScore(25);
+            }
+            if (decompMeshes[idx]) {
+                decompMeshes[idx].material.emissiveIntensity = 0.55;
+            }
+            showToast(`Inspeksi: ${comp.name}`);
+
+            const allDone = state.mod1.components.every(c => c.inspected);
+            if (allDone && !state.completedModules[1]) {
+                completeModule(1, "Luar biasa! Anda berhasil mendekomposisi sistem kompleks menjadi 4 komponen modular yang independen.");
+            }
+            renderModuleUI();
+        }
+
+        // --- MODUL 2: PENGENALAN POLA 3D ---
+        function buildModule2Scene() {
+            clearWorldGroup();
+
+            // Platform Jaringan Node
+            const platform = new THREE.Mesh(
+                new THREE.BoxGeometry(9.5, 0.3, 3.2),
+                new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.7, roughness: 0.3 })
+            );
+            platform.position.set(0, 0.15, 0);
+            platform.receiveShadow = true;
+            worldGroup.add(platform);
+
+            const totalNodes = state.mod2.sequence.length + 1; // 4 diketahui + 1 misteri
+            const spacing = 1.8;
+            const startX = -((totalNodes - 1) * spacing) / 2;
+
+            state.mod2.sequence.forEach((item, idx) => {
+                const mesh = createShapeMesh(item.shape, item.hex, false);
+                mesh.position.set(startX + idx * spacing, 1.5, 0);
+                mesh.userData = { module: 2, nodeIndex: idx, info: `Node #${idx + 1}: ${item.colorName}` };
+                worldGroup.add(mesh);
+                interactiveMeshes.push(mesh);
+                animatedObjects.push({ mesh, type: 'float', phase: idx * 0.8 });
+                patternMeshes.push(mesh);
+            });
+
+            // Node ke-5 (Target Misteri / Terjawab)
+            const targetIdx = state.mod2.sequence.length;
+            const targetObj = state.mod2.solved ? state.mod2.targetAnswer : { shape: 'octahedron', hex: '#475569' };
+            const mysteryMesh = createShapeMesh(targetObj.shape, targetObj.hex, !state.mod2.solved);
+            mysteryMesh.position.set(startX + targetIdx * spacing, 1.5, 0);
+            mysteryMesh.userData = { module: 2, isMystery: true };
+            worldGroup.add(mysteryMesh);
+            interactiveMeshes.push(mysteryMesh);
+            animatedObjects.push({ mesh: mysteryMesh, type: 'spin' });
+            patternMeshes.push(mysteryMesh);
+
+            // Garis penghubung antar node
+            const linePoints = patternMeshes.map(m => m.position.clone());
+            const lineGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x38bdf8 });
+            worldGroup.add(new THREE.Line(lineGeo, lineMat));
+        }
+
+        function createShapeMesh(shapeType, hexColor, isWireframe) {
+            let geo;
+            if (shapeType === 'sphere') geo = new THREE.SphereGeometry(0.62, 24, 24);
+            else if (shapeType === 'cone') geo = new THREE.ConeGeometry(0.62, 1.25, 24);
+            else if (shapeType === 'octahedron') geo = new THREE.OctahedronGeometry(0.68, 0);
+            else geo = new THREE.BoxGeometry(1.05, 1.05, 1.05);
+
+            const mat = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(hexColor),
+                emissive: new THREE.Color(hexColor),
+                emissiveIntensity: isWireframe ? 0.3 : 0.4,
+                wireframe: isWireframe,
+                roughness: 0.25,
+                metalness: 0.4
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.castShadow = true;
+            return mesh;
+        }
+
+        function submitPatternAnswer(optIndex) {
+            const chosen = state.mod2.options[optIndex];
+            const isCorrect = chosen.shape === state.mod2.targetAnswer.shape && chosen.hex.toLowerCase() === state.mod2.targetAnswer.hex.toLowerCase();
+
+            if (isCorrect) {
+                state.mod2.solved = true;
+                buildModule2Scene();
+                showToast("Tepat Sekali! Pola jaringan berhasil diprediksi.");
+                if (!state.completedModules[2]) {
+                    completeModule(2, state.mod2.ruleExplanation);
+                }
+            } else {
+                showToast("Belum tepat. Perhatikan urutan warna & bentuk dari kiri ke kanan!", "rose");
+                showAIFeedback(`Pilihan (${chosen.colorName}) belum sesuai dengan pola berulang. Periksa kembali relasi antar node sebelumnya: ${state.mod2.ruleExplanation}`);
+            }
+            renderModuleUI();
+        }
+
+        // --- MODUL 3: ABSTRAKSI 3D ---
+        function buildModule3Scene() {
+            clearWorldGroup();
+
+            const decorGroup = new THREE.Group();
+            const secondaryGroup = new THREE.Group();
+            const coreGroup = new THREE.Group();
+
+            // 1. Layer Dekorasi / Noise Visual (Gedung-gedung & Pohon Abstrak yang tidak relevan)
+            const buildingMat = new THREE.MeshStandardMaterial({ color: 0x334155, transparent: true, opacity: 0.85 });
+            for (let i = 0; i < 16; i++) {
+                const angle = (i / 16) * Math.PI * 2;
+                const radius = 2.6 + (i % 3) * 0.9;
+                const h = 1.2 + (i % 4) * 0.7;
+                const bMesh = new THREE.Mesh(new THREE.BoxGeometry(0.65, h, 0.65), buildingMat);
+                bMesh.position.set(Math.cos(angle) * radius, h / 2, Math.sin(angle) * radius);
+                decorGroup.add(bMesh);
+            }
+
+            // 2. Layer Kabel Sekunder / Redundan
+            const secMat = new THREE.LineBasicMaterial({ color: 0x64748b });
+            for (let i = 0; i < 10; i++) {
+                const pts = [
+                    new THREE.Vector3((Math.random() - 0.5) * 6, 0.2, (Math.random() - 0.5) * 6),
+                    new THREE.Vector3((Math.random() - 0.5) * 4, 2.2, (Math.random() - 0.5) * 4),
+                    new THREE.Vector3((Math.random() - 0.5) * 6, 0.2, (Math.random() - 0.5) * 6)
+                ];
+                secondaryGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), secMat));
+            }
+
+            // 3. Layer Inti Logika (Core Graph: Sumber -> Router -> Server Tujuan)
+            const coreCoords = [
+                new THREE.Vector3(-2.5, 1.2, 1.5),
+                new THREE.Vector3(0, 1.8, 0),
+                new THREE.Vector3(2.5, 1.2, -1.5)
+            ];
+            const coreColors = [0x00f0ff, 0xf59e0b, 0x10b981];
+
+            coreCoords.forEach((pos, idx) => {
+                const node = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.55, 24, 24),
+                    new THREE.MeshStandardMaterial({
+                        color: coreColors[idx],
+                        emissive: coreColors[idx],
+                        emissiveIntensity: 0.6
+                    })
+                );
+                node.position.copy(pos);
+                node.userData = { module: 3, isCoreTarget: idx === 2, nodeIdx: idx };
+                coreGroup.add(node);
+                interactiveMeshes.push(node);
+                if (idx === 2) abstractionGroups.targetCoreNode = node;
+            });
+
+            // Jalur Inti Terang
+            const coreLine = new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints(coreCoords),
+                new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 3 })
+            );
+            coreGroup.add(coreLine);
+
+            decorGroup.visible = state.mod3.showDecorations;
+            secondaryGroup.visible = state.mod3.showSecondaryWires;
+            coreGroup.visible = state.mod3.showCoreGraph;
+
+            abstractionGroups.decorations = decorGroup;
+            abstractionGroups.secondary = secondaryGroup;
+            abstractionGroups.core = coreGroup;
+
+            worldGroup.add(decorGroup);
+            worldGroup.add(secondaryGroup);
+            worldGroup.add(coreGroup);
+        }
+
+        function toggleAbstractionLayer(layerKey) {
+            state.mod3[layerKey] = !state.mod3[layerKey];
+            if (abstractionGroups.decorations) abstractionGroups.decorations.visible = state.mod3.showDecorations;
+            if (abstractionGroups.secondary) abstractionGroups.secondary.visible = state.mod3.showSecondaryWires;
+            if (abstractionGroups.core) abstractionGroups.core.visible = state.mod3.showCoreGraph;
+
+            checkAbstractionCompletion();
+            renderModuleUI();
+        }
+
+        function checkAbstractionCompletion() {
+            // Abstraksi berhasil jika noise disembunyikan & core graph terlihat
+            if (!state.mod3.showDecorations && !state.mod3.showSecondaryWires && state.mod3.showCoreGraph) {
+                if (!state.completedModules[3]) {
+                    completeModule(3, `Abstraksi berhasil! Detail lingkungan yang tidak relevan telah disaring sehingga menyisakan model graf inti: ${state.mod3.coreSummary}`);
+                }
+            }
+        }
+
+        // --- MODUL 4: DESAIN ALGORITMA (ROBOT LABIRIN 3D) ---
+        function buildModule4Scene() {
+            clearWorldGroup();
+            mazeTileMeshes = [];
+
+            const size = state.mod4.gridSize;
+            const tileSpacing = 1.45;
+            const offset = ((size - 1) * tileSpacing) / 2;
+
+            for (let z = 0; z < size; z++) {
+                for (let x = 0; x < size; x++) {
+                    const cell = state.mod4.grid[z][x];
+                    const worldX = x * tileSpacing - offset;
+                    const worldZ = z * tileSpacing - offset;
+
+                    let tileColor = 0x1e293b;
+                    if (cell === 2) tileColor = 0x0284c7; // Start
+                    if (cell === 3) tileColor = 0x10b981; // Goal
+
+                    const tile = new THREE.Mesh(
+                        new THREE.BoxGeometry(1.32, 0.2, 1.32),
+                        new THREE.MeshStandardMaterial({
+                            color: tileColor,
+                            emissive: cell === 3 ? 0x10b981 : 0x000000,
+                            emissiveIntensity: cell === 3 ? 0.5 : 0,
+                            roughness: 0.4
+                        })
+                    );
+                    tile.position.set(worldX, 0.1, worldZ);
+                    tile.receiveShadow = true;
+                    worldGroup.add(tile);
+
+                    // Rintangan Dinding Merah
+                    if (cell === 1) {
+                        const wall = new THREE.Mesh(
+                            new THREE.BoxGeometry(1.15, 1.0, 1.15),
+                            new THREE.MeshStandardMaterial({
+                                color: 0xf43f5e,
+                                emissive: 0xe11d48,
+                                emissiveIntensity: 0.25,
+                                roughness: 0.3
+                            })
+                        );
+                        wall.position.set(worldX, 0.7, worldZ);
+                        wall.castShadow = true;
+                        worldGroup.add(wall);
+                    }
+                }
+            }
+
+            // Buat Robot 3D
+            robotMesh = new THREE.Group();
+            const body = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.42, 0.48, 0.75, 20),
+                new THREE.MeshStandardMaterial({ color: 0x00f0ff, metalness: 0.6, roughness: 0.2 })
+            );
+            body.position.y = 0.58;
+            body.castShadow = true;
+            robotMesh.add(body);
+
+            // Visor Arah Depan Robot (Menghadap -Z lokal)
+            const visor = new THREE.Mesh(
+                new THREE.BoxGeometry(0.5, 0.18, 0.25),
+                new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xfacc15, emissiveIntensity: 0.9 })
+            );
+            visor.position.set(0, 0.72, -0.38);
+            robotMesh.add(visor);
+
+            worldGroup.add(robotMesh);
+            syncRobotTransform();
+        }
+
+        function syncRobotTransform() {
+            if (!robotMesh) return;
+            const size = state.mod4.gridSize;
+            const tileSpacing = 1.45;
+            const offset = ((size - 1) * tileSpacing) / 2;
+
+            robotMesh.position.set(
+                state.mod4.robotPos.x * tileSpacing - offset,
+                0,
+                state.mod4.robotPos.z * tileSpacing - offset
+            );
+            // dir: 0=Utara(0 rad), 1=Timur(-PI/2), 2=Selatan(PI), 3=Barat(PI/2)
+            const dirAngles = [0, -Math.PI / 2, Math.PI, Math.PI / 2];
+            robotMesh.rotation.y = dirAngles[state.mod4.robotPos.dir];
+        }
+
+        function addAlgoCommand(cmd) {
+            if (state.mod4.isRunning) return;
+            if (state.mod4.commands.length >= 16) {
+                showToast("Maksimal 16 blok instruksi algoritma!", "amber");
+                return;
+            }
+            state.mod4.commands.push(cmd);
+            renderModuleUI();
+        }
+
+        function clearAlgoCommands() {
+            if (state.mod4.isRunning) return;
+            state.mod4.commands = [];
+            resetRobotPosition();
+            renderModuleUI();
+        }
+
+        function resetRobotPosition() {
+            state.mod4.robotPos = { ...state.mod4.startPos };
+            syncRobotTransform();
+        }
+
+        async function runRobotAlgorithm() {
+            if (state.mod4.isRunning || state.mod4.commands.length === 0) {
+                if (state.mod4.commands.length === 0) showToast("Tambahkan blok perintah terlebih dahulu!", "amber");
+                return;
+            }
+
+            state.mod4.isRunning = true;
+            resetRobotPosition();
+            renderModuleUI();
+
+            // Ekspansi perintah (mendukung Loop 2x)
+            let expanded = [];
+            for (let i = 0; i < state.mod4.commands.length; i++) {
+                const c = state.mod4.commands[i];
+                if (c === 'LOOP2' && i + 1 < state.mod4.commands.length) {
+                    expanded.push(state.mod4.commands[i + 1]);
+                    expanded.push(state.mod4.commands[i + 1]);
+                    i++;
+                } else if (c !== 'LOOP2') {
+                    expanded.push(c);
+                }
+            }
+
+            const deltas = [
+                { dx: 0, dz: -1 }, // 0: Utara
+                { dx: 1, dz: 0 },  // 1: Timur
+                { dx: 0, dz: 1 },  // 2: Selatan
+                { dx: -1, dz: 0 }  // 3: Barat
+            ];
+
+            let crashed = false;
+            for (let step = 0; step < expanded.length; step++) {
+                await new Promise(r => setTimeout(r, 420));
+                const cmd = expanded[step];
+
+                if (cmd === 'LEFT') {
+                    state.mod4.robotPos.dir = (state.mod4.robotPos.dir + 3) % 4;
+                } else if (cmd === 'RIGHT') {
+                    state.mod4.robotPos.dir = (state.mod4.robotPos.dir + 1) % 4;
+                } else if (cmd === 'FORWARD') {
+                    const d = deltas[state.mod4.robotPos.dir];
+                    const nx = state.mod4.robotPos.x + d.dx;
+                    const nz = state.mod4.robotPos.z + d.dz;
+
+                    if (nx < 0 || nx >= state.mod4.gridSize || nz < 0 || nz >= state.mod4.gridSize || state.mod4.grid[nz][nx] === 1) {
+                        crashed = true;
+                        syncRobotTransform();
+                        break;
+                    }
+                    state.mod4.robotPos.x = nx;
+                    state.mod4.robotPos.z = nz;
+                }
+                syncRobotTransform();
+            }
+
+            state.mod4.isRunning = false;
+            const finalCell = state.mod4.grid[state.mod4.robotPos.z][state.mod4.robotPos.x];
+
+            if (crashed) {
+                showToast("Robot menabrak rintangan atau keluar batas! Perbaiki algoritma.", "rose");
+                showAIFeedback(`Algoritma berhenti karena tabrakan pada koordinat (${state.mod4.robotPos.x}, ${state.mod4.robotPos.z}). Coba telusuri langkah demi langkah (tracing) atau gunakan blok Belok Kiri/Kanan sebelum Maju.`);
+            } else if (finalCell === 3) {
+                showToast("MISI BERHASIL! Robot mencapai target tujuan!");
+                if (!state.completedModules[4]) {
+                    completeModule(4, `Algoritma efisien berhasil dieksekusi dalam ${expanded.length} langkah! Anda telah menerapkan sekuens, orientasi spasial, dan optimasi instruksi.`);
+                }
+            } else {
+                showToast("Robot berhenti sebelum mencapai target hijau.", "amber");
+                showAIFeedback(`Robot berhenti di posisi (${state.mod4.robotPos.x}, ${state.mod4.robotPos.z}) dan belum mencapai ubin Target Hijau. Tambahkan instruksi lanjutan.`);
+            }
+            renderModuleUI();
+        }
+
+        // =========================================================================
+        // INTERAKSI RAYCASTING PADA KANVAS 3D
+        // =========================================================================
+        function onCanvasPointerDown(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(interactiveMeshes, false);
+
+            if (intersects.length > 0) {
+                const hit = intersects[0].object;
+                const data = hit.userData;
+
+                if (data.module === 1) {
+                    if (!state.mod1.isExploded) state.mod1.isExploded = true;
+                    inspectDecompComponent(data.compIndex);
+                } else if (data.module === 2) {
+                    if (data.isMystery) {
+                        showToast("Node Misteri #5: Pilih prediksi bentuk & warna di panel kanan!");
+                    } else {
+                        showToast(data.info);
+                    }
+                } else if (data.module === 3) {
+                    showToast("Node Jalur Inti (Core Graph) Terdeteksi!");
+                    checkAbstractionCompletion();
+                }
+            }
+        }
+
+        // =========================================================================
+        // INTEGRASI FUNGSIONAL GENAI (GEMINI API DYNAMIC 3D PUZZLE GENERATOR)
+        // =========================================================================
+        async function generateAIChallenge() {
+            const btn = document.getElementById('btn-generate-ai');
+            const statusBar = document.getElementById('ai-status-bar');
+            const topicInput = document.getElementById('ai-topic-input').value.trim() || "Sistem Transportasi Cerdas & Robotika";
+            const difficulty = document.getElementById('ai-difficulty').value;
+
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>Merancang...</span>`;
+            statusBar.innerHTML = `<span class="text-cyan-300"><i class="fa-solid fa-wand-sparkles mr-1"></i>Gemini sedang menyusun skenario & geometri 3D...</span>`;
+
+            const mod = state.currentModule;
+            const systemInstruction = "Anda adalah Profesor Ilmu Komputer & Desainer Kurikulum VR/AR untuk Mata Kuliah Berpikir Komputasional. Buat skenario tantangan 3D interaktif yang segar, kontekstual, dan akurat dalam Bahasa Indonesia berdasarkan modul yang diminta.";
+
+            let prompt = "";
+            let responseSchema = {};
+
+            if (mod === 1) {
+                prompt = `Buatkan skenario Modul 1 (Dekomposisi) dengan topik "${topicInput}" dan tingkat kesulitan "${difficulty}". Pecah sistem menjadi tepat 4 sub-komponen utama.`;
+                responseSchema = {
+                    type: "OBJECT",
+                    properties: {
+                        title: { type: "STRING" },
+                        scenario: { type: "STRING" },
+                        components: {
+                            type: "ARRAY",
+                            items: {
+                                type: "OBJECT",
+                                properties: {
+                                    name: { type: "STRING" },
+                                    desc: { type: "STRING" }
+                                },
+                                required: ["name", "desc"]
+                            }
+                        }
+                    },
+                    required: ["title", "scenario", "components"]
+                };
+            } else if (mod === 2) {
+                prompt = `Buatkan skenario Modul 2 (Pengenalan Pola) bertema "${topicInput}" tingkat "${difficulty}". Buat urutan 4 node awal (gunakan bentuk 'box', 'sphere', atau 'cone' dan warna '#00f0ff', '#a855f7', atau '#f59e0b') serta 1 jawaban node ke-5 yang benar.`;
+                responseSchema = {
+                    type: "OBJECT",
+                    properties: {
+                        title: { type: "STRING" },
+                        scenario: { type: "STRING" },
+                        ruleExplanation: { type: "STRING" },
+                        sequence: {
+                            type: "ARRAY",
+                            items: {
+                                type: "OBJECT",
+                                properties: {
+                                    shape: { type: "STRING" },
+                                    colorName: { type: "STRING" },
+                                    hex: { type: "STRING" }
+                                },
+                                required: ["shape", "colorName", "hex"]
+                            }
+                        },
+                        targetAnswer: {
+                            type: "OBJECT",
+                            properties: {
+                                shape: { type: "STRING" },
+                                colorName: { type: "STRING" },
+                                hex: { type: "STRING" }
+                            },
+                            required: ["shape", "colorName", "hex"]
+                        }
+                    },
+                    required: ["title", "scenario", "ruleExplanation", "sequence", "targetAnswer"]
+                };
+            } else if (mod === 3) {
+                prompt = `Buatkan skenario Modul 3 (Abstraksi) bertema "${topicInput}" tingkat "${difficulty}" di mana mahasiswa harus menyaring detail non-esensial dari model 3D kompleks.`;
+                responseSchema = {
+                    type: "OBJECT",
+                    properties: {
+                        title: { type: "STRING" },
+                        scenario: { type: "STRING" },
+                        coreSummary: { type: "STRING" }
+                    },
+                    required: ["title", "scenario", "coreSummary"]
+                };
+            } else {
+                prompt = `Buatkan skenario Modul 4 (Desain Algoritma) bertema "${topicInput}" tingkat "${difficulty}" untuk robot 3D di grid 5x5. Pastikan jalur dari [0][0] (nilai 2) ke [4][4] (nilai 3) valid dan bisa dilewati (0 = jalan, 1 = rintangan).`;
+                responseSchema = {
+                    type: "OBJECT",
+                    properties: {
+                        title: { type: "STRING" },
+                        scenario: { type: "STRING" },
+                        grid: {
+                            type: "ARRAY",
+                            items: {
+                                type: "ARRAY",
+                                items: { type: "INTEGER" }
+                            }
+                        }
+                    },
+                    required: ["title", "scenario", "grid"]
+                };
+            }
+
+            try {
+                const payload = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    systemInstruction: { parts: [{ text: systemInstruction }] },
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: responseSchema
+                    }
+                };
+
+                const response = await fetchWithRetry(
+                    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    }
+                );
+
+                const result = await response.json();
+                const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!rawText) throw new Error("Respons AI kosong");
+
+                const data = JSON.parse(rawText);
+                applyGeneratedScenario(mod, data);
+                statusBar.innerHTML = `<span class="text-emerald-400"><i class="fa-solid fa-check-circle mr-1"></i>Skenario 3D baru berhasil dirender!</span><span class="font-mono text-purple-300">Gemini AI</span>`;
+                showToast("Skenario 3D baru dari GenAI telah diterapkan!");
+
+            } catch (err) {
+                // Fallback prosedural cerdas jika offline/rate-limit agar simulasi tetap berjalan mulus
+                applyProceduralFallbackScenario(mod, topicInput, difficulty);
+                statusBar.innerHTML = `<span class="text-cyan-300"><i class="fa-solid fa-bolt mr-1"></i>Variasi Simulasi Prosedural Aktif</span><span class="font-mono text-purple-300">Adaptive AI</span>`;
+                showToast("Variasi tantangan 3D baru berhasil dimuat!");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i><span>Generate 3D</span>`;
+            }
+        }
+
+        async function fetchWithRetry(url, options, retries = 3) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const res = await fetch(url, options);
+                    if (res.ok) return res;
+                } catch (e) {}
+                await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+            }
+            throw new Error("API unreachable");
+        }
+
+        function applyGeneratedScenario(mod, data) {
+            const colors = ["#00f0ff", "#a855f7", "#f59e0b", "#10b981"];
+            if (mod === 1 && data.components?.length >= 4) {
+                state.mod1.title = data.title;
+                state.mod1.scenario = data.scenario;
+                state.mod1.isExploded = false;
+                state.mod1.components = data.components.slice(0, 4).map((c, idx) => ({
+                    id: `c${idx+1}`,
+                    name: c.name,
+                    desc: c.desc,
+                    color: colors[idx],
+                    inspected: false
+                }));
+                buildModule1Scene();
+            } else if (mod === 2 && data.sequence?.length >= 4) {
+                state.mod2.title = data.title;
+                state.mod2.scenario = data.scenario;
+                state.mod2.ruleExplanation = data.ruleExplanation;
+                state.mod2.sequence = data.sequence.slice(0, 4);
+                state.mod2.targetAnswer = data.targetAnswer;
+                state.mod2.solved = false;
+                buildModule2Scene();
+            } else if (mod === 3) {
+                state.mod3.title = data.title;
+                state.mod3.scenario = data.scenario;
+                state.mod3.coreSummary = data.coreSummary;
+                state.mod3.showDecorations = true;
+                state.mod3.showSecondaryWires = true;
+                state.mod3.showCoreGraph = true;
+                buildModule3Scene();
+            } else if (mod === 4 && data.grid?.length === 5) {
+                state.mod4.title = data.title;
+                state.mod4.scenario = data.scenario;
+                state.mod4.grid = data.grid;
+                state.mod4.grid[0][0] = 2;
+                state.mod4.grid[4][4] = 3;
+                state.mod4.commands = [];
+                resetRobotPosition();
+                buildModule4Scene();
+            }
+            renderModuleUI();
+        }
+
+        function applyProceduralFallbackScenario(mod, topic, diff) {
+            const presets = {
+                1: {
+                    title: `Dekomposisi Sistem: ${topic} (${diff})`,
+                    scenario: `Pecah arsitektur ${topic} menjadi 4 modul fungsional terpisah dengan mengklik objek 3D di tengah laboratorium.`,
+                    components: [
+                        { name: "Modul Akuisisi Data", desc: `Menangkap parameter input utama pada ${topic}.` },
+                        { name: "Modul Validasi & Filter", desc: "Membersihkan noise data sebelum diproses algoritma." },
+                        { name: "Mesin Keputusan Inti", desc: "Menjalankan logika optimasi berbasis aturan." },
+                        { name: "Antarmuka Eksekusi", desc: "Mengirimkan sinyal kontrol ke perangkat fisik." }
+                    ]
+                },
+                2: {
+                    title: `Pola Telemetri: ${topic} (${diff})`,
+                    scenario: `Identifikasi pola paket data 3D pada jaringan ${topic} dan prediksi bentuk node ke-5.`,
+                    ruleExplanation: "Pola berulang siklus 3 (ABC-A): Kubus Cyan → Bola Ungu → Kerucut Amber → Kubus Cyan → Bola Ungu.",
+                    sequence: [
+                        { shape: "box", colorName: "Cyan", hex: "#00f0ff" },
+                        { shape: "sphere", colorName: "Ungu", hex: "#a855f7" },
+                        { shape: "cone", colorName: "Amber", hex: "#f59e0b" },
+                        { shape: "box", colorName: "Cyan", hex: "#00f0ff" }
+                    ],
+                    targetAnswer: { shape: "sphere", colorName: "Ungu", hex: "#a855f7" }
+                },
+                3: {
+                    title: `Abstraksi Arsitektur: ${topic} (${diff})`,
+                    scenario: `Saring gangguan visual lingkungan pada simulasi ${topic} untuk mengisolasi rute komunikasi utama.`,
+                    coreSummary: `Topologi inti ${topic} terhubung langsung melalui 3 node backbone utama.`
+                },
+                4: {
+                    title: `Rute Otonom: ${topic} (${diff})`,
+                    scenario: `Program robot logistik ${topic} melewati koridor baru menuju titik distribusi hijau.`,
+                    grid: [
+                        [2, 0, 0, 1, 0],
+                        [0, 1, 0, 1, 0],
+                        [0, 1, 0, 0, 0],
+                        [0, 0, 1, 1, 0],
+                        [1, 0, 0, 0, 3]
+                    ]
+                }
+            };
+            applyGeneratedScenario(mod, presets[mod]);
+        }
+
+        // =========================================================================
+        // KONTROL MODE XR (3D LAB, VR STEREO SPLIT-SCREEN, AR CAMERA OVERLAY)
+        // =========================================================================
+        async function setXRMode(mode) {
+            state.xrMode = mode;
+
+            // Update styling tombol
+            ['3D', 'VR', 'AR'].forEach(m => {
+                const btn = document.getElementById(`btn-mode-${m.toLowerCase()}`);
+                if (m === mode) {
+                    btn.className = "px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-cyan-500 text-slate-950 shadow transition";
+                } else {
+                    btn.className = "px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 text-slate-300 hover:bg-slate-800/80 transition";
+                }
+            });
+
+            const videoEl = document.getElementById('ar-video-bg');
+            const simRoomEl = document.getElementById('ar-simulated-room');
+            const arReticleEl = document.getElementById('ar-reticle-hud');
+            const arCtrlBox = document.getElementById('ar-controls-box');
+            const vrDivider = document.getElementById('vr-split-divider');
+
+            // Reset efek sebelumnya
+            vrDivider.style.display = mode === 'VR' ? 'block' : 'none';
+            renderer.setScissorTest(mode === 'VR');
+
+            if (mode === 'AR') {
+                labEnvironmentGroup.visible = false;
+                scene.fog = null;
+                arReticleEl.style.display = 'block';
+                arCtrlBox.classList.remove('hidden');
+
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'environment' },
+                        audio: false
+                    });
+                    state.arStream = stream;
+                    videoEl.srcObject = stream;
+                    videoEl.style.display = 'block';
+                    simRoomEl.style.display = 'none';
+                    showToast("Mode AR Kamera Aktif! Arahkan kamera ke meja Anda.");
+                } catch (err) {
+                    // Fallback elegan jika kamera diblokir iframe/tidak tersedia
+                    videoEl.style.display = 'none';
+                    simRoomEl.style.display = 'block';
+                    showToast("Kamera perangkat dibatasi browser — beralih ke Simulasi Ruang AR Virtual.", "amber");
+                }
+            } else {
+                // Matikan stream kamera jika keluar dari mode AR
+                if (state.arStream) {
+                    state.arStream.getTracks().forEach(t => t.stop());
+                    state.arStream = null;
+                }
+                videoEl.style.display = 'none';
+                simRoomEl.style.display = 'none';
+                arReticleEl.style.display = 'none';
+                arCtrlBox.classList.add('hidden');
+                labEnvironmentGroup.visible = true;
+                scene.fog = new THREE.FogExp2(0x050814, 0.022);
+
+                if (mode === 'VR') {
+                    showToast("Mode VR Stereo Split-Screen Aktif (Siap untuk Headset Cardboard/VR)!");
+                }
+            }
+        }
+
+        function updateARScale(val) {
+            state.arScale = parseFloat(val);
+            worldGroup.scale.set(state.arScale, state.arScale, state.arScale);
+            document.getElementById('ar-scale-val').textContent = `${state.arScale.toFixed(1)}x`;
+        }
+
+        // =========================================================================
+        // RENDER ANTARMUKA PENGGUNA (UI PANEL KANAN & PROGRESS TRACKER)
+        // =========================================================================
+        function switchModule(modId) {
+            state.currentModule = modId;
+            document.getElementById('ai-feedback-box').classList.add('hidden');
+
+            // Highlight tab aktif
+            for (let i = 1; i <= 4; i++) {
+                const tab = document.getElementById(`tab-mod-${i}`);
+                if (i === modId) {
+                    tab.classList.add('border-cyan-400', 'bg-cyan-950/60');
+                } else {
+                    tab.classList.remove('border-cyan-400', 'bg-cyan-950/60');
+                }
+            }
+
+            if (modId === 1) buildModule1Scene();
+            else if (modId === 2) buildModule2Scene();
+            else if (modId === 3) buildModule3Scene();
+            else if (modId === 4) buildModule4Scene();
+
+            renderModuleUI();
+        }
+
+        function renderModuleUI() {
+            const container = document.getElementById('module-content-area');
+            const mod = state.currentModule;
+
+            if (mod === 1) {
+                const inspectedCount = state.mod1.components.filter(c => c.inspected).length;
+                container.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300">Pilar 1 • Dekomposisi</span>
+                            <span class="text-xs font-mono text-slate-400">${inspectedCount}/4 Terinspeksi</span>
+                        </div>
+                        <h2 class="text-sm sm:text-base font-bold text-white mb-1">${state.mod1.title}</h2>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-3">${state.mod1.scenario}</p>
+
+                        <button onclick="toggleDecompExplode()" class="w-full py-2.5 px-3 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/50 text-cyan-200 font-semibold text-xs flex items-center justify-center gap-2 mb-3 transition">
+                            <i class="fa-solid ${state.mod1.isExploded ? 'fa-compress' : 'fa-expand'}"></i>
+                            <span>${state.mod1.isExploded ? 'Satukan Kembali Struktur 3D' : 'Pecah Sistem 3D (Exploded View)'}</span>
+                        </button>
+
+                        <div class="space-y-2">
+                            ${state.mod1.components.map((c, idx) => `
+                                <div onclick="inspectDecompComponent(${idx})" class="glass-card rounded-xl p-2.5 cursor-pointer flex items-start justify-between gap-2 ${c.inspected ? 'border-emerald-500/50 bg-emerald-950/20' : ''}">
+                                    <div class="flex items-start gap-2.5">
+                                        <span class="w-3 h-3 rounded-full mt-1 shrink-0" style="background:${c.color}"></span>
+                                        <div>
+                                            <div class="text-xs font-bold text-white">${c.name}</div>
+                                            <div class="text-[11px] text-slate-400 leading-snug mt-0.5">${c.desc}</div>
+                                        </div>
+                                    </div>
+                                    <span class="text-xs ${c.inspected ? 'text-emerald-400' : 'text-slate-500'}">
+                                        <i class="fa-solid ${c.inspected ? 'fa-circle-check' : 'fa-hand-pointer'}"></i>
+                                    </span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else if (mod === 2) {
+                container.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-purple-500/20 text-purple-300">Pilar 2 • Pengenalan Pola</span>
+                            <span class="text-xs font-mono ${state.mod2.solved ? 'text-emerald-400' : 'text-amber-300'}">${state.mod2.solved ? 'Terpecahkan' : 'Menunggu Prediksi'}</span>
+                        </div>
+                        <h2 class="text-sm sm:text-base font-bold text-white mb-1">${state.mod2.title}</h2>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-3">${state.mod2.scenario}</p>
+
+                        <div class="glass-card rounded-xl p-2.5 mb-3">
+                            <div class="text-[10px] font-mono text-slate-400 mb-1.5">URUTAN SINYAL TERDETEKSI:</div>
+                            <div class="flex items-center justify-between gap-1 text-center">
+                                ${state.mod2.sequence.map((s, i) => `
+                                    <div class="flex-1 py-1.5 px-1 rounded-lg bg-slate-900/90 border border-slate-700">
+                                        <div class="w-3 h-3 mx-auto rounded-sm mb-1" style="background:${s.hex}"></div>
+                                        <div class="text-[10px] font-mono text-slate-300">#${i+1} ${s.colorName}</div>
+                                    </div>
+                                `).join('')}
+                                <div class="flex-1 py-1.5 px-1 rounded-lg bg-purple-950/70 border border-dashed border-purple-400">
+                                    <div class="text-xs font-bold text-purple-300">?</div>
+                                    <div class="text-[10px] font-mono text-purple-200">#5</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="text-xs font-semibold text-slate-200 mb-2">Pilih Node 3D ke-5 untuk melengkapi pola:</div>
+                        <div class="grid grid-cols-1 gap-2">
+                            ${state.mod2.options.map((opt, idx) => `
+                                <button onclick="submitPatternAnswer(${idx})" class="glass-card rounded-xl p-2.5 flex items-center justify-between text-left hover:border-purple-400 transition">
+                                    <div class="flex items-center gap-2.5">
+                                        <span class="w-4 h-4 rounded" style="background:${opt.hex}"></span>
+                                        <span class="text-xs font-semibold text-white">${opt.colorName}</span>
+                                    </div>
+                                    <i class="fa-solid fa-chevron-right text-xs text-slate-400"></i>
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else if (mod === 3) {
+                const isAbstracted = !state.mod3.showDecorations && !state.mod3.showSecondaryWires && state.mod3.showCoreGraph;
+                container.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">Pilar 3 • Abstraksi</span>
+                            <span class="text-xs font-mono ${isAbstracted ? 'text-emerald-400' : 'text-slate-400'}">${isAbstracted ? 'Optimal' : 'Filter Layer'}</span>
+                        </div>
+                        <h2 class="text-sm sm:text-base font-bold text-white mb-1">${state.mod3.title}</h2>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-3">${state.mod3.scenario}</p>
+
+                        <div class="space-y-2 mb-3">
+                            <label class="glass-card rounded-xl p-2.5 flex items-center justify-between cursor-pointer">
+                                <div>
+                                    <div class="text-xs font-bold text-white">Layer 1: Gedung & Lingkungan (Noise)</div>
+                                    <div class="text-[10px] text-slate-400">Detail visual yang tidak memengaruhi logika rute</div>
+                                </div>
+                                <input type="checkbox" ${state.mod3.showDecorations ? 'checked' : ''} onchange="toggleAbstractionLayer('showDecorations')" class="w-4 h-4 accent-amber-400">
+                            </label>
+
+                            <label class="glass-card rounded-xl p-2.5 flex items-center justify-between cursor-pointer">
+                                <div>
+                                    <div class="text-xs font-bold text-white">Layer 2: Kabel Sekunder Redundan</div>
+                                    <div class="text-[10px] text-slate-400">Koneksi cadangan berlatensi tinggi</div>
+                                </div>
+                                <input type="checkbox" ${state.mod3.showSecondaryWires ? 'checked' : ''} onchange="toggleAbstractionLayer('showSecondaryWires')" class="w-4 h-4 accent-amber-400">
+                            </label>
+
+                            <label class="glass-card rounded-xl p-2.5 flex items-center justify-between cursor-pointer border-emerald-500/40">
+                                <div>
+                                    <div class="text-xs font-bold text-emerald-300">Layer 3: Graf Logika Inti (Core Graph)</div>
+                                    <div class="text-[10px] text-slate-400">Representasi esensial Sumber → Router → Tujuan</div>
+                                </div>
+                                <input type="checkbox" ${state.mod3.showCoreGraph ? 'checked' : ''} onchange="toggleAbstractionLayer('showCoreGraph')" class="w-4 h-4 accent-emerald-400">
+                            </label>
+                        </div>
+
+                        ${isAbstracted ? `
+                            <div class="rounded-xl bg-emerald-950/60 border border-emerald-500/40 p-2.5 text-xs text-emerald-200">
+                                <i class="fa-solid fa-check-circle mr-1"></i> ${state.mod3.coreSummary}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            } else if (mod === 4) {
+                const cmdLabels = {
+                    'FORWARD': { label: 'Maju 1 Langkah', icon: 'fa-arrow-up', cls: 'bg-cyan-500/20 text-cyan-200 border-cyan-500/40' },
+                    'LEFT': { label: 'Belok Kiri 90°', icon: 'fa-rotate-left', cls: 'bg-purple-500/20 text-purple-200 border-purple-500/40' },
+                    'RIGHT': { label: 'Belok Kanan 90°', icon: 'fa-rotate-right', cls: 'bg-amber-500/20 text-amber-200 border-amber-500/40' },
+                    'LOOP2': { label: 'Ulangi 2x (Next)', icon: 'fa-repeat', cls: 'bg-pink-500/20 text-pink-200 border-pink-500/40' }
+                };
+
+                container.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Pilar 4 • Desain Algoritma</span>
+                            <span class="text-xs font-mono text-slate-400">Arah Awal: Timur (→)</span>
+                        </div>
+                        <h2 class="text-sm sm:text-base font-bold text-white mb-1">${state.mod4.title}</h2>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-2.5">${state.mod4.scenario}</p>
+
+                        <!-- Palet Blok Perintah -->
+                        <div class="grid grid-cols-2 gap-1.5 mb-2.5">
+                            <button onclick="addAlgoCommand('FORWARD')" class="py-2 px-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-xs font-semibold text-cyan-200 flex items-center gap-1.5">
+                                <i class="fa-solid fa-arrow-up"></i> Maju
+                            </button>
+                            <button onclick="addAlgoCommand('LOOP2')" class="py-2 px-2.5 rounded-xl bg-pink-500/20 hover:bg-pink-500/30 border border-pink-400/40 text-xs font-semibold text-pink-200 flex items-center gap-1.5">
+                                <i class="fa-solid fa-repeat"></i> Loop 2x
+                            </button>
+                            <button onclick="addAlgoCommand('LEFT')" class="py-2 px-2.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/40 text-xs font-semibold text-purple-200 flex items-center gap-1.5">
+                                <i class="fa-solid fa-rotate-left"></i> Belok Kiri
+                            </button>
+                            <button onclick="addAlgoCommand('RIGHT')" class="py-2 px-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-xs font-semibold text-amber-200 flex items-center gap-1.5">
+                                <i class="fa-solid fa-rotate-right"></i> Belok Kanan
+                            </button>
+                        </div>
+
+                        <!-- Antrean Algoritma Mahasiswa -->
+                        <div class="glass-card rounded-xl p-2 mb-2.5 min-h-[78px] max-h-[125px] overflow-y-auto">
+                            <div class="text-[10px] font-mono text-slate-400 mb-1 flex justify-between">
+                                <span>SUSUNAN BLOK ALGORITMA (${state.mod4.commands.length}/16):</span>
+                                <button onclick="clearAlgoCommands()" class="text-rose-400 hover:underline">Hapus Semua</button>
+                            </div>
+                            ${state.mod4.commands.length === 0 ? `
+                                <div class="text-[11px] text-slate-500 italic py-2 text-center">Klik tombol instruksi di atas untuk menyusun algoritma...</div>
+                            ` : `
+                                <div class="flex flex-wrap gap-1">
+                                    ${state.mod4.commands.map((c, idx) => `
+                                        <span class="px-2 py-1 rounded-lg border text-[10px] font-mono flex items-center gap-1 ${cmdLabels[c].cls}">
+                                            <span>${idx+1}.</span>
+                                            <i class="fa-solid ${cmdLabels[c].icon}"></i>
+                                            <span>${c}</span>
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            `}
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button onclick="runRobotAlgorithm()" ${state.mod4.isRunning ? 'disabled' : ''} class="flex-1 py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg transition">
+                                <i class="fa-solid fa-play"></i>
+                                <span>${state.mod4.isRunning ? 'Mengeksekusi...' : 'Jalankan Simulasi 3D'}</span>
+                            </button>
+                            <button onclick="resetRobotPosition()" class="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition" title="Reset Posisi Robot">
+                                <i class="fa-solid fa-rotate-left"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // =========================================================================
+        // SISTEM SKOR, PROGRES MODUL, TIMER 15-20 MENIT & NOTIFIKASI
+        // =========================================================================
+        function addScore(points) {
+            state.score += points;
+            document.getElementById('ct-score').textContent = `${state.score} XP`;
+        }
+
+        function completeModule(modId, feedbackMessage) {
+            if (!state.completedModules[modId]) {
+                state.completedModules[modId] = true;
+                addScore(100);
+                document.getElementById(`badge-done-${modId}`).classList.remove('hidden');
+            }
+
+            const doneCount = Object.values(state.completedModules).filter(Boolean).length;
+            document.getElementById('progress-text').textContent = `${doneCount}/4`;
+            document.getElementById('progress-bar').style.width = `${(doneCount / 4) * 100}%`;
+
+            showAIFeedback(feedbackMessage);
+
+            if (doneCount === 4) {
+                setTimeout(() => openSummaryModal(), 1200);
+            }
+        }
+
+        function showAIFeedback(text) {
+            const box = document.getElementById('ai-feedback-box');
+            const p = document.getElementById('ai-feedback-text');
+            p.textContent = text;
+            box.classList.remove('hidden');
+        }
+
+        function showToast(msg, color = "cyan") {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const borderClass = color === 'rose' ? 'border-rose-500/60 text-rose-200' : (color === 'amber' ? 'border-amber-400/60 text-amber-200' : 'border-cyan-400/60 text-cyan-100');
+            toast.className = `glass-panel px-4 py-2 rounded-full text-xs font-medium border ${borderClass} shadow-xl transition-all duration-300`;
+            toast.innerHTML = `<i class="fa-solid fa-circle-info mr-1.5"></i>${msg}`;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-8px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3200);
+        }
+
+        function startSessionTimer() {
+            setInterval(() => {
+                state.secondsElapsed++;
+                const mins = String(Math.floor(state.secondsElapsed / 60)).padStart(2, '0');
+                const secs = String(state.secondsElapsed % 60).padStart(2, '0');
+                document.getElementById('session-timer').textContent = `${mins}:${secs} / 20:00`;
+            }, 1000);
+        }
+
+        function openSummaryModal() {
+            const doneCount = Object.values(state.completedModules).filter(Boolean).length;
+            const mins = String(Math.floor(state.secondsElapsed / 60)).padStart(2, '0');
+            const secs = String(state.secondsElapsed % 60).padStart(2, '0');
+
+            document.getElementById('modal-modules-done').textContent = `${doneCount} / 4`;
+            document.getElementById('modal-total-score').textContent = `${state.score} XP`;
+            document.getElementById('modal-time-spent').textContent = `${mins}:${secs}`;
+
+            const titles = [
+                "Modul 1: Dekomposisi Sistem Kompleks",
+                "Modul 2: Pengenalan Pola Sinyal 3D",
+                "Modul 3: Abstraksi & Filter Layer",
+                "Modul 4: Desain Algoritma Robot Labirin"
+            ];
+
+            document.getElementById('modal-checklist').innerHTML = titles.map((t, i) => {
+                const ok = state.completedModules[i + 1];
+                return `
+                    <div class="glass-card rounded-xl px-3 py-2 flex items-center justify-between">
+                        <span class="${ok ? 'text-white font-medium' : 'text-slate-400'}">${t}</span>
+                        <span class="font-mono text-[11px] ${ok ? 'text-emerald-400' : 'text-slate-500'}">
+                            ${ok ? '<i class="fa-solid fa-check-circle mr-1"></i>Selesai' : 'Belum'}
+                        </span>
+                    </div>
+                `;
+            }).join('');
+
+            const modal = document.getElementById('summary-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeSummaryModal() {
+            const modal = document.getElementById('summary-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function resetAllProgress() {
+            state.score = 0;
+            state.secondsElapsed = 0;
+            state.completedModules = { 1: false, 2: false, 3: false, 4: false };
+            for (let i = 1; i <= 4; i++) {
+                document.getElementById(`badge-done-${i}`).classList.add('hidden');
+            }
+            document.getElementById('ct-score').textContent = '0 XP';
+            document.getElementById('progress-text').textContent = '0/4';
+            document.getElementById('progress-bar').style.width = '0%';
+            closeSummaryModal();
+            switchModule(1);
+            showToast("Sesi pembelajaran telah direset.");
+        }
+
+        // =========================================================================
+        // ANIMATION LOOP (MENDUKUNG NORMAL 3D, AR OVERLAY, & VR STEREO SPLIT-VIEW)
+        // =========================================================================
+        function animate() {
+            requestAnimationFrame(animate);
+            const elapsed = clock.getElapsedTime();
+
+            controls.update();
+
+            // Animasi halus dekomposisi Modul 1 (Interpolasi posisi)
+            if (state.currentModule === 1 && decompMeshes.length > 0) {
+                decompMeshes.forEach(mesh => {
+                    const target = state.mod1.isExploded ? mesh.userData.explodedPos : mesh.userData.collapsedPos;
+                    mesh.position.lerp(target, 0.09);
+                });
+            }
+
+            // Animasi objek berputar & mengambang
+            animatedObjects.forEach(obj => {
+                if (obj.type === 'spin') {
+                    obj.mesh.rotation.y += 0.015;
+                    obj.mesh.rotation.x += 0.008;
+                } else if (obj.type === 'float') {
+                    obj.mesh.position.y = 1.5 + Math.sin(elapsed * 2.2 + obj.phase) * 0.14;
+                }
+            });
+
+            // Rendering Normal / AR vs VR Stereo Side-by-Side
+            if (state.xrMode === 'VR') {
+                const w = window.innerWidth;
+                const h = window.innerHeight;
+                const halfW = w / 2;
+
+                camera.aspect = halfW / h;
+                camera.updateProjectionMatrix();
+
+                // Mata Kiri
+                renderer.setViewport(0, 0, halfW, h);
+                renderer.setScissor(0, 0, halfW, h);
+                camera.position.x -= 0.08;
+                renderer.render(scene, camera);
+
+                // Mata Kanan
+                renderer.setViewport(halfW, 0, halfW, h);
+                renderer.setScissor(halfW, 0, halfW, h);
+                camera.position.x += 0.16;
+                renderer.render(scene, camera);
+
+                // Kembalikan posisi kamera asli
+                camera.position.x -= 0.08;
+            } else {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+                renderer.render(scene, camera);
+            }
+        }
+
+        // Mulai aplikasi setelah window selesai dimuat
+        window.onload = function () {
+            initThreeJS();
+            switchModule(1);
+            startSessionTimer();
+            animate();
+        };
+    </script>
+</body>
+</html>
